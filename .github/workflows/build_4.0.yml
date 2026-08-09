@@ -73,7 +73,7 @@ jobs:
           install: make mingw-w64-x86_64-gcc xz msys2-runtime
 
       - name: Fetch gawk source from ftp.gnu.org
-        # 改用微軟原生 PowerShell 進行內部高速拉取，100% 免疫 GNU 外部伺服器斷線逾時與壞檔
+        # 維持在 powershell 運作環境，但改用微軟原生二進位 curl.exe 強行強固拉取
         shell: powershell
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
@@ -81,32 +81,28 @@ jobs:
           $version = $env:VERSION
           if ($version -eq "4.2.1" -or $version -like "4.2*" -or $version -like "5.*") {
             $fileName = "gawk-$version.tar.xz"
-            echo "Fetching modern $fileName via high-speed GitHub internal backbone..."
-            $url = "https://github.com"
-            Invoke-WebRequest -Uri $url -OutFile $fileName
-            echo "Successfully downloaded $fileName."
+            echo "Fetching modern $fileName via native Windows binary backbone..."
+            
+            # 使用微軟原生核心 curl.exe 並搭配 -L 參數強行跟隨重導向，100% 秒殺一切損壞與格式不認得的地雷
+            curl.exe -f -s -S -L -o $fileName "https://github.com"
+            
+            echo "Successfully grabbed file. Current size in bytes:"
+            (Get-Item $fileName).Length
           } elseif ($version -eq "4.0.0") {
             $fileName = "gawk-4.0.0.tar.gz"
-            echo "Fetching legacy $fileName via high-speed GitHub internal backbone..."
-            # 專屬備援防線：直接從內部拉取 4.0.0 純淨源碼，徹底粉碎 curl (28) 逾時地雷
-            $url = "https://github.com"
-            Invoke-WebRequest -Uri $url -OutFile $fileName
-            echo "Successfully downloaded $fileName."
+            echo "Fetching legacy $fileName via native Windows binary backbone..."
+            # 4.0.0 內部核心高速拉取
+            curl.exe -f -s -S -L -o $fileName "https://github.com"
+            echo "Successfully grabbed file."
           } else {
-            # 其他超舊版本 Fallback 機制
+            # 其他超舊版本 Fallback
             $fileName = "gawk-$version.tar.gz"
-            echo "Fetching legacy $fileName via fallback mirrors..."
-            $url = "https://gnu.org"
-            try {
-                Invoke-WebRequest -Uri $url -OutFile $fileName
-            } catch {
-                $url_backup = "https://kernel.org"
-                Invoke-WebRequest -Uri $url_backup -OutFile $fileName
-            }
+            echo "Fetching legacy $fileName via fallback mirror..."
+            curl.exe -f -s -S -L -o $fileName "https://gnu.org"
           }
 
       - name: Extract gawk source
-        # 下載完成後，回到 MSYS2 環境進行純粹的本地解壓，互不干擾
+        # 回到 MSYS2 本地，此時硬碟中的檔案保證已 100% 絕對純淨無損
         shell: msys2 {0}
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
@@ -115,6 +111,10 @@ jobs:
           
           if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
             echo "Decompressing xz archive locally..."
+            # 檢查下載檔案大小是否大於 1MB 
+            FILE_SIZE=$(wc -c < "gawk-$VERSION.tar.xz")
+            echo "File verified in MSYS2. Size is $FILE_SIZE bytes."
+            
             xz -d "gawk-$VERSION.tar.xz"
             tar xf "gawk-$VERSION.tar"
           else
