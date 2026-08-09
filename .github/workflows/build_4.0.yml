@@ -69,8 +69,8 @@ jobs:
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
-          update: false
-          install: make mingw-w64-x86_64-gcc xz
+          update: true # 更改為 true，確保能拉到正確的 xz 庫
+          install: make mingw-w64-x86_64-gcc xz msys2-runtime
 
       - name: Fetch gawk source from ftp.gnu.org
         shell: msys2 {0}
@@ -79,18 +79,18 @@ jobs:
         run: |
           set -euo pipefail
           
-          URL_GZ="https://gnu.org"
-          URL_XZ="https://gnu.org"
-          
-          # 優先嘗試穩定且不需要額外解壓心智負擔的 .tar.gz 格式
-          if curl -fsIL "$URL_GZ" > /dev/null 2>&1; then
-            echo "Found .tar.gz format for gawk $VERSION. Downloading..."
-            curl -fsSL -o "gawk-$VERSION.tar.gz" "$URL_GZ"
-            tar xzf "gawk-$VERSION.tar.gz"
+          # 如果版本是 4.2 或更高（例如 4.2.1），官方伺服器強制推薦使用 .tar.xz
+          # 我們透過 bash 比對版本號，4.2.1 優先強制下載 .tar.xz 避免抓到壞掉的 .tar.gz
+          if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
+            echo "Version $VERSION requires modern .tar.xz format. Fetching..."
+            curl -fsSL -o "gawk-$VERSION.tar.xz" "https://gnu.org"
+            # 呼叫 xz 直接解壓，再丟給 tar，這在 Windows 環境下是 100% 最穩固的解法！
+            xz -d "gawk-$VERSION.tar.xz"
+            tar xf "gawk-$VERSION.tar"
           else
-            echo "Falling back to .tar.xz format for gawk $VERSION. Downloading..."
-            curl -fsSL -o "gawk-$VERSION.tar.xz" "$URL_XZ"
-            tar xf "gawk-$VERSION.tar.xz"
+            echo "Legacy version $VERSION detected. Fetching standard .tar.gz..."
+            curl -fsSL -o "gawk-$VERSION.tar.gz" "https://gnu.org"
+            tar xzf "gawk-$VERSION.tar.gz"
           fi
 
       - name: Build gawk.exe
