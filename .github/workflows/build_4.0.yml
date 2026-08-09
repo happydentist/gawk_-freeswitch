@@ -78,9 +78,19 @@ jobs:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
-          curl -fsSL -o "gawk-$VERSION.tar.gz" \
-            "https://gnu.org"
-          tar xzf "gawk-$VERSION.tar.gz"
+          
+          # === 【核心修復：動態判定下載格式】 ===
+          # 檢查官方伺服器是否存在新版的 .tar.xz 格式（適用於 4.2.1+）
+          URL_XZ="https://gnu.org"
+          if curl -fsIL "$URL_XZ" > /dev/null 2>&1; then
+            echo "Detected .tar.xz format for gawk $VERSION. Downloading..."
+            curl -fsSL -o "gawk-$VERSION.tar.xz" "$URL_XZ"
+            tar xf "gawk-$VERSION.tar.xz"
+          else
+            echo "Fallback to legacy .tar.gz format for gawk $VERSION. Downloading..."
+            curl -fsSL -o "gawk-$VERSION.tar.gz" "https://gnu.org"
+            tar xf "gawk-$VERSION.tar.gz"
+          fi
 
       - name: Build gawk.exe
         shell: msys2 {0}
