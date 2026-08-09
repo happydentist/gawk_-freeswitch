@@ -105,19 +105,24 @@ jobs:
           # === 【核心修復 2】 修正 protos.h 中的 creat 宣告衝突 ===
           if [ -f "protos.h" ]; then
             echo "Fixing creat function prototype in protos.h..."
-            sed -i 's/mode_t/int/g'  protos.h
+            sed -i 's/mode_t/int/g' protos.h
           fi
 
           # === 【核心修復 3】 暴力移除 awk.h 內過時的 vfprintf 阻礙檢查 ===
-          # 直接刪除引發 "#error \"you lose: you need a system with vfprintf\"" 的那行程式碼
           if [ -f "awk.h" ]; then
             echo "Removing vfprintf error check from awk.h..."
             sed -i '/you need a system with vfprintf/d' awk.h
+            
+            # === 【核心修復 4】 全域注入現代 C 標準標頭檔 ===
+            echo "Injecting standard headers into awk.h..."
+            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>' awk.h
           fi
 
-          # === 【核心修復 4】 注入全域強制相容巨集 ===
-          # -Dvfprintf=vfprintf -> 強制讓編譯器繞過任何內部的 #undef 邏輯
-          MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
+          # === 【核心修復 5】 終極全域強制型態綁定 ===
+          # -Duintmax_t="unsigned long long" -> 強制將最大整數與現代 64 位元硬體型態完全綁定，粉碎 config.h 的錯誤判斷
+          # -Dintmax_t="long long"           -> 同步綁定有號最大整數
+          # -Dvfprintf=vfprintf             -> 繞過內部 #undef
+          MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict -Duintmax_t=\"unsigned long long\" -Dintmax_t=\"long long\""
           WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
           
           EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
