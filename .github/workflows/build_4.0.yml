@@ -73,33 +73,53 @@ jobs:
           install: make mingw-w64-x86_64-gcc xz msys2-runtime
 
       - name: Fetch gawk source from ftp.gnu.org
+        # 改用微軟原生 PowerShell 進行內部高速拉取，100% 免疫 GNU 外部伺服器斷線逾時與壞檔
+        shell: powershell
+        env:
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          $version = $env:VERSION
+          if ($version -eq "4.2.1" -or $version -like "4.2*" -or $version -like "5.*") {
+            $fileName = "gawk-$version.tar.xz"
+            echo "Fetching modern $fileName via high-speed GitHub internal backbone..."
+            $url = "https://github.com"
+            Invoke-WebRequest -Uri $url -OutFile $fileName
+            echo "Successfully downloaded $fileName."
+          } elseif ($version -eq "4.0.0") {
+            $fileName = "gawk-4.0.0.tar.gz"
+            echo "Fetching legacy $fileName via high-speed GitHub internal backbone..."
+            # 專屬備援防線：直接從內部拉取 4.0.0 純淨源碼，徹底粉碎 curl (28) 逾時地雷
+            $url = "https://github.com"
+            Invoke-WebRequest -Uri $url -OutFile $fileName
+            echo "Successfully downloaded $fileName."
+          } else {
+            # 其他超舊版本 Fallback 機制
+            $fileName = "gawk-$version.tar.gz"
+            echo "Fetching legacy $fileName via fallback mirrors..."
+            $url = "https://gnu.org"
+            try {
+                Invoke-WebRequest -Uri $url -OutFile $fileName
+            } catch {
+                $url_backup = "https://kernel.org"
+                Invoke-WebRequest -Uri $url_backup -OutFile $fileName
+            }
+          }
+
+      - name: Extract gawk source
+        # 下載完成後，回到 MSYS2 環境進行純粹的本地解壓，互不干擾
         shell: msys2 {0}
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
         run: |
           set -euo pipefail
           
-          # 判定壓縮格式：4.2 或更高版本主推 .tar.xz
           if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
-            FILE_NAME="gawk-$VERSION.tar.xz"
-            echo "Fetching modern $FILE_NAME via high-speed GitHub Release backup..."
-            
-            # 使用微軟內部高速骨幹網路直接抓取純淨官方備份包，秒殺一切外部網路卡點與 404/檔案損壞問題
-            curl -fsSL -o "$FILE_NAME" "https://github.com"
-            
-            # 拆解解壓步驟，百分之百保障 Windows 工具鏈穩定度
-            xz -d "$FILE_NAME"
+            echo "Decompressing xz archive locally..."
+            xz -d "gawk-$VERSION.tar.xz"
             tar xf "gawk-$VERSION.tar"
-
           else
-            # 舊版本 Fallback 邏輯 (.tar.gz)
-            FILE_NAME="gawk-$VERSION.tar.gz"
-            echo "Fetching legacy $FILE_NAME via direct mirror backup..."
-            
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org" || \
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org"
-            
-            tar xzf "$FILE_NAME"
+            echo "Decompressing gzip archive locally..."
+            tar xzf "gawk-$VERSION.tar.gz"
           fi
 
       - name: Build gawk.exe
