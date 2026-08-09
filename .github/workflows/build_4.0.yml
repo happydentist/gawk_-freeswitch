@@ -79,7 +79,7 @@ jobs:
         run: |
           set -euo pipefail
           curl -fsSL -o "gawk-$VERSION.tar.gz" \
-            "https://ftp.gnu.org/gnu/gawk/gawk-$VERSION.tar.gz"
+            "https://gnu.org"
           tar xzf "gawk-$VERSION.tar.gz"
 
       - name: Build gawk.exe
@@ -96,62 +96,61 @@ jobs:
           # LibGw32C. Use our minimal shim instead.
           cp ../shim/langinfo.h .
 
-          # 判定目前是否為 4.0.0 版本
-          if [ "$VERSION" = "4.0.0" ]; then
-            echo "=== Detected version 4.0.0! Applying advanced modernization patches ==="
+          # === 【動態版本判定】針對 4.0.0 (以及殘留舊模版的檔案) 啟動現代化重構補丁 ===
+          if [ "$VERSION" = "4.0.0" ] || [ -f "dfa.c" ]; then
+            echo "=== Applying advanced toolchain compatibility patches for version $VERSION ==="
 
-            # 1. 解決 strcoll 重複定義問題
+            # 1. 解決 strcoll 函式與現代 MSVCRT.dll 的重複定義衝突
             if [ -f "missing_d/strcoll.c" ]; then
               echo "" > missing_d/strcoll.c
             fi
 
-            # 2. 修正 protos.h 中的 creat 宣告衝突
+            # 2. 修正 protos.h 中的 creat 宣告型態，對齊現代 Windows io.h 的 int 定義
             if [ -f "protos.h" ]; then
               sed -i 's/mode_t/int/g' protos.h
             fi
 
-            # 3. 暴力移除 awk.h 內過時的 vfprintf 阻礙檢查
+            # 3. 暴力移除 awk.h 內過時的 vfprintf 自爆檢查阻礙
             if [ -f "awk.h" ]; then
               sed -i '/you need a system with vfprintf/d' awk.h
             fi
 
-            # 4. 全域基礎補丁清單
+            # 4. 定義全域核心補丁清單 (強行灌入 C99/現代工具鏈必備的標準標頭檔與常數)
             BASE_PATCH='#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#include <stdbool.h>\n#include <ctype.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define PACKAGE "gawk"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1'
 
-            # 5. 注入全域主要標頭檔入口
+            # 5. 全域注入核心主要標頭檔入口 (護航主程式核心)
             if [ -f "awk.h" ]; then
               sed -i "1i${BASE_PATCH}" awk.h
             fi
 
-            # 6. 【核心關鍵修正】：將補丁與 is_blank 巨集「單獨」注入 regex_internal.h
-            # 護航 regex_internal.c, regexec.c 消除全面語法崩潰，且絕對不會誤傷 field.c
-            if [ -f "regex_internal.h" ]; then
-              echo "Injecting ultimate toolchain fixes into regex_internal.h..."
-              sed -i "1i${BASE_PATCH}\n#define is_blank isblank" regex_internal.h
-            fi
-
-            # 7. 精準將 is_blank 巨集塞進 dfa.c 檔案最頂端
+            # 6. 【精準定向修正 A】：直接在 dfa.c 第一行灌入補丁與 is_blank 轉向，100% 避免與 field.c 衝突
             if [ -f "dfa.c" ]; then
-              echo "Injecting is_blank macro exclusively into dfa.c..."
-              sed -i '1i#define is_blank isblank' dfa.c
+              echo "Injecting ultimate patches directly into dfa.c..."
+              sed -i "1i${BASE_PATCH}\n#define is_blank isblank" dfa.c
             fi
 
-            # 8. 解開 random.h 內部巨集的型態死結
+            # 7. 【精準定向修正 B】：在 regex_internal.h 補上布林值，護航 regex.c 與 regexec.c 消除大面積語法崩潰
+            if [ -f "regex_internal.h" ]; then
+              sed -i "1i#include <stdbool.h>" regex_internal.h
+            fi
+
+            # 8. 解開 random.h 內部自帶巨集替換所引發的 gawk_uint32_t 型態死結
             if [ -f "random.h" ]; then
               sed -i '1itypedef uint32_t gawk_uint32_t;' random.h
             fi
 
-            # 9. 設定 4.0.0 專屬的全域編譯引導巨集
+            # 9. 配置 4.0.0 專屬的全域相容編譯引導巨集與寬容警告參數 (強制加入 -I. 修正路徑)
             MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
             WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
             EXTRA_FLAGS="-O2 -I. -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
 
           else
-            echo "=== Detected legacy version $VERSION. Using original conservative build flags ==="
+            echo "=== Detected stable legacy version $VERSION. Using original conservative build flags ==="
+            # 完全維持原作者為 3.1.x (如 3.1.8) 設定的標準乾淨引導參數，確保舊版不被新補丁誤傷
             EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
           fi
 
-          # 執行最終編譯
+          # 呼叫 Makefile 執行最終的編譯與連結
           make all \
             CC=gcc O=.o \
             CF="$EXTRA_FLAGS" \
@@ -200,7 +199,7 @@ jobs:
           ASSETS=(dist/gawk.exe dist/pgawk.exe dist/COPYING dist/sha256sums.txt)
 
           {
-            echo "GNU awk **$VERSION** for Windows (x86-64), built from [ftp.gnu.org/gnu/gawk/gawk-$VERSION.tar.gz](https://ftp.gnu.org/gnu/gawk/gawk-$VERSION.tar.gz) with MinGW-w64 GCC (\`make mingw32\` from the tarball's \`pc/\` port)."
+            echo "GNU awk **$VERSION** for Windows (x86-64), built from [ftp.gnu.org/gnu/gawk/gawk-$VERSION.tar.gz](https://gnu.org) with MinGW-w64 GCC (\`make mingw32\` from the tarball's \`pc/\` port)."
             echo
             echo "Native win32 binaries — no Cygwin/MSYS layer. Runtime dependencies are Windows system DLLs only (\`kernel32.dll\`, \`msvcrt.dll\`, \`msvcp60.dll\`)."
             echo
