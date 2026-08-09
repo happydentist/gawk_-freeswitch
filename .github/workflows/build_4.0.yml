@@ -113,11 +113,10 @@ jobs:
             echo "Removing vfprintf error check from awk.h..."
             sed -i '/you need a system with vfprintf/d' awk.h
             
-            # === 【核心修復 4】 全域注入標準庫、型態安全鎖、版本號與訊號回傳型態 ===
-            # 新增 #define VERSION "4.0.0" 消除 main.c 的 VERSION undeclared
-            # 新增 #define RETSIGTYPE void 消除 main.c 的 unknown type name
+            # === 【核心修復 4】 全域注入標準庫、型態安全鎖與全域環境巨集 ===
+            # 新增 #define LOCALEDIR "." 徹底破除 main.c 在 bindtextdomain 處的未定義錯誤
             echo "Injecting standard headers and global patches into awk.h..."
-            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define RETSIGTYPE void' awk.h
+            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1' awk.h
           fi
 
           # === 【核心修復 5】 解開 random.h 內部巨集的型態死結 ===
