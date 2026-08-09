@@ -70,7 +70,7 @@ jobs:
         with:
           msystem: MINGW64
           update: false
-          install: make mingw-w64-x86_64-gcc
+          install: make mingw-w64-x86_64-gcc xz
 
       - name: Fetch gawk source from ftp.gnu.org
         shell: msys2 {0}
@@ -79,17 +79,18 @@ jobs:
         run: |
           set -euo pipefail
           
-          # === 【核心修復：動態判定下載格式】 ===
-          # 檢查官方伺服器是否存在新版的 .tar.xz 格式（適用於 4.2.1+）
+          URL_GZ="https://gnu.org"
           URL_XZ="https://gnu.org"
-          if curl -fsIL "$URL_XZ" > /dev/null 2>&1; then
-            echo "Detected .tar.xz format for gawk $VERSION. Downloading..."
+          
+          # 優先嘗試穩定且不需要額外解壓心智負擔的 .tar.gz 格式
+          if curl -fsIL "$URL_GZ" > /dev/null 2>&1; then
+            echo "Found .tar.gz format for gawk $VERSION. Downloading..."
+            curl -fsSL -o "gawk-$VERSION.tar.gz" "$URL_GZ"
+            tar xzf "gawk-$VERSION.tar.gz"
+          else
+            echo "Falling back to .tar.xz format for gawk $VERSION. Downloading..."
             curl -fsSL -o "gawk-$VERSION.tar.xz" "$URL_XZ"
             tar xf "gawk-$VERSION.tar.xz"
-          else
-            echo "Fallback to legacy .tar.gz format for gawk $VERSION. Downloading..."
-            curl -fsSL -o "gawk-$VERSION.tar.gz" "https://gnu.org"
-            tar xf "gawk-$VERSION.tar.gz"
           fi
 
       - name: Build gawk.exe
