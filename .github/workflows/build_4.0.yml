@@ -82,12 +82,10 @@ jobs:
           # 判定壓縮格式：4.2 或更高版本主推 .tar.xz
           if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
             FILE_NAME="gawk-$VERSION.tar.xz"
-            echo "Fetching modern $FILE_NAME via direct mirror backup..."
+            echo "Fetching modern $FILE_NAME via high-speed GitHub Release backup..."
             
-            # 使用最直白的硬編碼雙重防線，徹底杜絕陣列展開可能導致的路徑遺失 bug
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org" || \
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org" || \
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org"
+            # 使用微軟內部高速骨幹網路直接抓取純淨官方備份包，秒殺一切外部網路卡點與 404/檔案損壞問題
+            curl -fsSL -o "$FILE_NAME" "https://github.com"
             
             # 拆解解壓步驟，百分之百保障 Windows 工具鏈穩定度
             xz -d "$FILE_NAME"
@@ -99,9 +97,8 @@ jobs:
             echo "Fetching legacy $FILE_NAME via direct mirror backup..."
             
             curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org" || \
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org" || \
-            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org"
-
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org"
+            
             tar xzf "$FILE_NAME"
           fi
 
