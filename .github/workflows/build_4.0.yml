@@ -102,22 +102,23 @@ jobs:
             echo "" > missing_d/strcoll.c
           fi
 
-          # === 【核心修復 2】 修正 pc/config.h 遺漏的現代 MinGW 巨集與 C99 關鍵字 ===
-          # 在 config.h 最上方注入現代編譯器所需的巨集定義
-          if [ -f "config.h" ]; then
-            echo "Injecting missing macro definitions into config.h..."
-            sed -i '1i#define HAVE_STDARG_H 1\n#define HAVE_VFPRINTF 1\n#define restrict __restrict\n#define HAVE_SNPRINTF 1' config.h
-          fi
-
-          # === 【核心修復 3】 修正 protos.h 中的 creat 宣告衝突 ===
-          # 將 protos.h 裡的 "extern int creat(const char *, mode_t);" 替換成與微軟 io.h 一致的 int
+          # === 【核心修復 2】 修正 protos.h 中的 creat 宣告衝突 ===
+          # 使用更寬容的匹配，直接把 mode_t 替換成 int，防止 sed 因空格不匹配而失敗
           if [ -f "protos.h" ]; then
             echo "Fixing creat function prototype in protos.h..."
-            sed -i 's/extern int creat(const char \*, mode_t);/extern int creat(const char *, int);/g' protos.h
+            sed -i 's/mode_t/int/g' protos.h
           fi
 
-          # === 【核心修復 4】 傳遞相容性參數 ===
-          EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 -Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
+          # === 【核心修復 3】 用 -D 參數直接破除標頭檔的 #error 限制 ===
+          # -DHAVE_STDARG_H=1    -> 擊碎 <varargs.h> 錯誤
+          # -DHAVE_VFPRINTF=1    -> 擊碎 vfprintf 錯誤
+          # -DHAVE_SNPRINTF=1    -> 讓系統知道有 snprintf
+          # -Drestrict=__restrict -> 修正 restrict 關鍵字造成的語法錯誤
+          # -Wno-error           -> 忽略所有過時警告
+          MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
+          WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
+          
+          EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
 
           make all \
             CC=gcc O=.o \
