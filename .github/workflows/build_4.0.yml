@@ -114,14 +114,24 @@ jobs:
             sed -i '/you need a system with vfprintf/d' awk.h
           fi
 
-          # === 【核心修復 4：轉移至 config.h 全域注入】 ===
-          # 由於 dfa.c 不讀取 awk.h，我們改在 config.h 最頂端注入所有現代標準庫
-          # 包含 <stdbool.h> 解決 bool/true/false 未定義錯誤
-          # 包含 <ctype.h> 並將 is_blank 重導向至 isblank 解決 dfa.c 的語法崩潰
-          if [ -f "config.h" ]; then
-            echo "Injecting ultimate toolchain fixes into config.h..."
-            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#include <stdbool.h>\n#include <ctype.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define PACKAGE "gawk"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1\n#define is_blank isblank' config.h
+          # === 【全域注入核心補丁清單】 ===
+          # 這串巨集和標準庫能同時擊碎 uintmax_t, bool, O_RDWR, VERSION, PACKAGE 等所有現代工具鏈衝突
+          PATCH_CONTENT='#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#include <stdbool.h>\n#include <ctype.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define PACKAGE "gawk"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1\n#define is_blank isblank'
+
+          # === 【核心修復 4：雙重保險注入】 ===
+          # 1. 注入 awk.h (護航所有 gawk 核心主程式如 array.c, builtin.c, main.c)
+          if [ -f "awk.h" ]; then
+            echo "Injecting ultimate toolchain fixes into awk.h..."
+            sed -i "1i${PATCH_CONTENT}" awk.h
           fi
+
+          # 2. 確保 config.h 存在並注入 (護航所有外部掛載庫如 dfa.c)
+          if [ ! -f "config.h" ] && [ -f "pc/config.h" ]; then
+            cp pc/config.h .
+          fi
+          touch config.h
+          echo "Injecting ultimate toolchain fixes into config.h..."
+          sed -i "1i${PATCH_CONTENT}" config.h
 
           # === 【核心修復 5】 解開 random.h 內部巨集的型態死結 ===
           if [ -f "random.h" ]; then
