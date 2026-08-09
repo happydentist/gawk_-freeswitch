@@ -79,37 +79,16 @@ jobs:
         run: |
           set -euo pipefail
           
-          # 定義多重備援高速鏡像站點群，徹底防止單一伺服器斷線逾時
-          MIRRORS=(
-            "https://gnu.org"
-            "https://gnu.org"
-            "https://init7.net"
-            "https://kernel.org"
-          )
-
-          DOWNLOAD_SUCCESS=false
-
           # 判定壓縮格式：4.2 或更高版本主推 .tar.xz
           if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
             FILE_NAME="gawk-$VERSION.tar.xz"
+            echo "Fetching modern $FILE_NAME via direct mirror backup..."
             
-            # 輪詢鏡像站群進行下載
-            for MIRROR in "${MIRRORS[@]}"; do
-              URL="$MIRROR/$FILE_NAME"
-              echo "Trying to fetch from: $URL"
-              # 設定 --connect-timeout 防止卡死，失敗自動嘗試下一個
-              if curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "$URL"; then
-                echo "Successfully downloaded $FILE_NAME!"
-                DOWNLOAD_SUCCESS=true
-                break
-              fi
-            done
-
-            if [ "$DOWNLOAD_SUCCESS" = "false" ]; then
-              echo "::error::All mirrors failed to download $FILE_NAME"
-              exit 1
-            fi
-
+            # 使用最直白的硬編碼雙重防線，徹底杜絕陣列展開可能導致的路徑遺失 bug
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org" || \
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org" || \
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org"
+            
             # 拆解解壓步驟，百分之百保障 Windows 工具鏈穩定度
             xz -d "$FILE_NAME"
             tar xf "gawk-$VERSION.tar"
@@ -117,21 +96,11 @@ jobs:
           else
             # 舊版本 Fallback 邏輯 (.tar.gz)
             FILE_NAME="gawk-$VERSION.tar.gz"
+            echo "Fetching legacy $FILE_NAME via direct mirror backup..."
             
-            for MIRROR in "${MIRRORS[@]}"; do
-              URL="$MIRROR/$FILE_NAME"
-              echo "Trying to fetch legacy from: $URL"
-              if curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "$URL"; then
-                echo "Successfully downloaded $FILE_NAME!"
-                DOWNLOAD_SUCCESS=true
-                break
-              fi
-            done
-
-            if [ "$DOWNLOAD_SUCCESS" = "false" ]; then
-              echo "::error::All mirrors failed to download $FILE_NAME"
-              exit 1
-            fi
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org" || \
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://kernel.org" || \
+            curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "https://gnu.org"
 
             tar xzf "$FILE_NAME"
           fi
