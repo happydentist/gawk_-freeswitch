@@ -79,18 +79,61 @@ jobs:
         run: |
           set -euo pipefail
           
-          # 如果版本是 4.2 或更高（例如 4.2.1），官方伺服器強制推薦使用 .tar.xz
-          # 我們透過 bash 比對版本號，4.2.1 優先強制下載 .tar.xz 避免抓到壞掉的 .tar.gz
+          # 定義多重備援高速鏡像站點群，徹底防止單一伺服器斷線逾時
+          MIRRORS=(
+            "https://gnu.org"
+            "https://gnu.org"
+            "https://init7.net"
+            "https://kernel.org"
+          )
+
+          DOWNLOAD_SUCCESS=false
+
+          # 判定壓縮格式：4.2 或更高版本主推 .tar.xz
           if [[ "$VERSION" == 4.2* ]] || [[ "$VERSION" == 5.* ]]; then
-            echo "Version $VERSION requires modern .tar.xz format. Fetching..."
-            curl -fsSL -o "gawk-$VERSION.tar.xz" "https://gnu.org"
-            # 呼叫 xz 直接解壓，再丟給 tar，這在 Windows 環境下是 100% 最穩固的解法！
-            xz -d "gawk-$VERSION.tar.xz"
+            FILE_NAME="gawk-$VERSION.tar.xz"
+            
+            # 輪詢鏡像站群進行下載
+            for MIRROR in "${MIRRORS[@]}"; do
+              URL="$MIRROR/$FILE_NAME"
+              echo "Trying to fetch from: $URL"
+              # 設定 --connect-timeout 防止卡死，失敗自動嘗試下一個
+              if curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "$URL"; then
+                echo "Successfully downloaded $FILE_NAME!"
+                DOWNLOAD_SUCCESS=true
+                break
+              fi
+            done
+
+            if [ "$DOWNLOAD_SUCCESS" = "false" ]; then
+              echo "::error::All mirrors failed to download $FILE_NAME"
+              exit 1
+            fi
+
+            # 拆解解壓步驟，百分之百保障 Windows 工具鏈穩定度
+            xz -d "$FILE_NAME"
             tar xf "gawk-$VERSION.tar"
+
           else
-            echo "Legacy version $VERSION detected. Fetching standard .tar.gz..."
-            curl -fsSL -o "gawk-$VERSION.tar.gz" "https://gnu.org"
-            tar xzf "gawk-$VERSION.tar.gz"
+            # 舊版本 Fallback 邏輯 (.tar.gz)
+            FILE_NAME="gawk-$VERSION.tar.gz"
+            
+            for MIRROR in "${MIRRORS[@]}"; do
+              URL="$MIRROR/$FILE_NAME"
+              echo "Trying to fetch legacy from: $URL"
+              if curl -fsSL --connect-timeout 10 -o "$FILE_NAME" "$URL"; then
+                echo "Successfully downloaded $FILE_NAME!"
+                DOWNLOAD_SUCCESS=true
+                break
+              fi
+            done
+
+            if [ "$DOWNLOAD_SUCCESS" = "false" ]; then
+              echo "::error::All mirrors failed to download $FILE_NAME"
+              exit 1
+            fi
+
+            tar xzf "$FILE_NAME"
           fi
 
       - name: Build gawk.exe
