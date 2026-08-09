@@ -113,10 +113,10 @@ jobs:
             echo "Removing vfprintf error check from awk.h..."
             sed -i '/you need a system with vfprintf/d' awk.h
             
-            # === 【核心修復 4】 全域注入標準庫、型態安全鎖與全域環境巨集 ===
-            # 新增 #define PACKAGE "gawk" 破除 main.c 在 bindtextdomain 處的 PACKAGE 未定義錯誤
+            # === 【核心修復 4】 全域注入標準庫、數學庫、型態安全鎖與環境巨集 ===
+            # 新增 <math.h> 消除 awkgram.y 的 modf 隱式宣告警告
             echo "Injecting standard headers and global patches into awk.h..."
-            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define PACKAGE "gawk"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1' awk.h
+            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#include <math.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1\n#define VERSION "4.0.0"\n#define PACKAGE "gawk"\n#define RETSIGTYPE void\n#define LOCALEDIR "."\n#define INT_DIV_MISSING_DIAG 1' awk.h
           fi
 
           # === 【核心修復 5】 解開 random.h 內部巨集的型態死結 ===
@@ -125,11 +125,12 @@ jobs:
             sed -i '1itypedef uint32_t gawk_uint32_t;' random.h
           fi
 
-          # === 【核心修復 6】 修正巨集參數與放寬相容性警告 ===
+          # === 【核心修復 6】 修正巨集參數與放寬相容性警告（強烈加入 -I.） ===
+          # 新增 -I. 確保 dfa.c 能完美找到 config.h 消除 No such file or directory 錯誤
           MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
           WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
           
-          EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
+          EXTRA_FLAGS="-O2 -I. -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
 
           make all \
             CC=gcc O=.o \
