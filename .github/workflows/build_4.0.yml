@@ -103,19 +103,21 @@ jobs:
           fi
 
           # === 【核心修復 2】 修正 protos.h 中的 creat 宣告衝突 ===
-          # 使用更寬容的匹配，直接把 mode_t 替換成 int，防止 sed 因空格不匹配而失敗
           if [ -f "protos.h" ]; then
             echo "Fixing creat function prototype in protos.h..."
-            sed -i 's/mode_t/int/g' protos.h
+            sed -i 's/mode_t/int/g'  protos.h
           fi
 
-          # === 【核心修復 3】 用 -D 參數直接破除標頭檔的 #error 限制 ===
-          # -DHAVE_STDARG_H=1    -> 擊碎 <varargs.h> 錯誤
-          # -DHAVE_VFPRINTF=1    -> 擊碎 vfprintf 錯誤
-          # -DHAVE_SNPRINTF=1    -> 讓系統知道有 snprintf
-          # -Drestrict=__restrict -> 修正 restrict 關鍵字造成的語法錯誤
-          # -Wno-error           -> 忽略所有過時警告
-          MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
+          # === 【核心修復 3】 暴力移除 awk.h 內過時的 vfprintf 阻礙檢查 ===
+          # 直接刪除引發 "#error \"you lose: you need a system with vfprintf\"" 的那行程式碼
+          if [ -f "awk.h" ]; then
+            echo "Removing vfprintf error check from awk.h..."
+            sed -i '/you need a system with vfprintf/d' awk.h
+          fi
+
+          # === 【核心修復 4】 注入全域強制相容巨集 ===
+          # -Dvfprintf=vfprintf -> 強制讓編譯器繞過任何內部的 #undef 邏輯
+          MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
           WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
           
           EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 $MACRO_FLAGS $WARN_FLAGS"
