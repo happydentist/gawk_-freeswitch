@@ -114,12 +114,18 @@ jobs:
             sed -i '/you need a system with vfprintf/d' awk.h
             
             # === 【核心修復 4】 全域注入現代 C 標準標頭檔與型態安全鎖 ===
-            # 在第一行精準插入標準庫，並鎖死 HAVE_UINTMAX_T 巨集，防止 config.h 攪局
             echo "Injecting standard headers and type locks into awk.h..."
             sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1' awk.h
           fi
 
-          # === 【核心修復 5】 修正巨集參數（移除引發衝突的 -Duintmax_t） ===
+          # === 【核心修復 5：新】 解開 random.h 內部巨集的型態死結 ===
+          # 在 random.h 第一行插入 typedef，讓 gawk_uint32_t 映射回標準 32 位元無號整數
+          if [ -f "random.h" ]; then
+            echo "Fixing gawk_uint32_t definition dead-lock in random.h..."
+            sed -i '1itypedef uint32_t gawk_uint32_t;' random.h
+          fi
+
+          # === 【核心修復 6】 修正巨集參數與放寬相容性警告 ===
           MACRO_FLAGS="-DHAVE_STDARG_H=1 -DHAVE_VFPRINTF=1 -Dvfprintf=vfprintf -DHAVE_SNPRINTF=1 -Drestrict=__restrict"
           WARN_FLAGS="-Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
           
