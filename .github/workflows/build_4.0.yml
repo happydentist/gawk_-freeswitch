@@ -97,14 +97,26 @@ jobs:
           cp ../shim/langinfo.h .
 
           # === 【核心修復 1】 解決 gawk 4.0.0 的 strcoll 重複定義問題 ===
-          # 如果存在 missing_d/strcoll.c，直接將其清空，避免與現代 MSVCRT.dll 衝突
           if [ -f "missing_d/strcoll.c" ]; then
             echo "Fixing strcoll multiple definition for gawk 4.0.0..."
             echo "" > missing_d/strcoll.c
           fi
 
-          # === 【核心修復 2】 加強寬容參數，同時帶入 CF 與 CFLAGS ===
-          # 額外加上 -Wno-error, -Wno-pointer-to-int-cast 等參數，防止 64 位元指標轉換時被 GCC 16 視為致命錯誤中斷
+          # === 【核心修復 2】 修正 pc/config.h 遺漏的現代 MinGW 巨集與 C99 關鍵字 ===
+          # 在 config.h 最上方注入現代編譯器所需的巨集定義
+          if [ -f "config.h" ]; then
+            echo "Injecting missing macro definitions into config.h..."
+            sed -i '1i#define HAVE_STDARG_H 1\n#define HAVE_VFPRINTF 1\n#define restrict __restrict\n#define HAVE_SNPRINTF 1' config.h
+          fi
+
+          # === 【核心修復 3】 修正 protos.h 中的 creat 宣告衝突 ===
+          # 將 protos.h 裡的 "extern int creat(const char *, mode_t);" 替換成與微軟 io.h 一致的 int
+          if [ -f "protos.h" ]; then
+            echo "Fixing creat function prototype in protos.h..."
+            sed -i 's/extern int creat(const char \*, mode_t);/extern int creat(const char *, int);/g' protos.h
+          fi
+
+          # === 【核心修復 4】 傳遞相容性參數 ===
           EXTRA_FLAGS="-O2 -gdwarf-2 -g3 -std=gnu89 -Wno-error -Wno-stringop-overflow -Wno-pointer-to-int-cast -Wno-int-to-pointer-cast -Wno-implicit-function-declaration -Wno-int-conversion -Wno-incompatible-pointer-types -Wno-return-mismatch"
 
           make all \
