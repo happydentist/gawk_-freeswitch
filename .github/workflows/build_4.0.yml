@@ -114,12 +114,12 @@ jobs:
             sed -i '/you need a system with vfprintf/d' awk.h
             
             # === 【核心修復 4】 全域注入現代 C 標準標頭檔與型態安全鎖 ===
+            # 在第一行精準插入標準庫，新增 <fcntl.h> 破除 io.c 的 O_RDWR 未定義錯誤
             echo "Injecting standard headers and type locks into awk.h..."
-            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1' awk.h
+            sed -i '1i#include <stdio.h>\n#include <stdlib.h>\n#include <stdint.h>\n#include <limits.h>\n#include <fcntl.h>\n#define HAVE_INTMAX_T 1\n#define HAVE_UINTMAX_T 1\n#define HAVE_LONG_LONG 1\n#define HAVE_UNSIGNED_LONG_LONG 1' awk.h
           fi
 
-          # === 【核心修復 5：新】 解開 random.h 內部巨集的型態死結 ===
-          # 在 random.h 第一行插入 typedef，讓 gawk_uint32_t 映射回標準 32 位元無號整數
+          # === 【核心修復 5】 解開 random.h 內部巨集的型態死結 ===
           if [ -f "random.h" ]; then
             echo "Fixing gawk_uint32_t definition dead-lock in random.h..."
             sed -i '1itypedef uint32_t gawk_uint32_t;' random.h
